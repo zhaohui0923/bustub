@@ -33,7 +33,10 @@ class Matrix {
    * @param cols The number of columns
    *
    */
-  Matrix(int rows, int cols) : rows_(rows), cols_(cols) { linear_ = static_cast<T *>(malloc(sizeof(T) * rows * cols)); }
+  Matrix(int rows, int cols) : rows_(rows), cols_(cols) {
+    linear_ = static_cast<T *>(malloc(sizeof(T) * rows * cols));
+    memset(linear_, 0, sizeof(T) * rows * cols);
+  }
 
   /** The number of rows in the matrix */
   int rows_;
@@ -229,13 +232,17 @@ class RowMatrixOperations {
     auto b_row_count = matrixB->GetRowCount();
     auto a_col_count = matrixA->GetColumnCount();
     auto b_col_count = matrixB->GetColumnCount();
-    if (a_row_count != b_row_count || a_col_count != b_col_count) {
+    if (a_col_count != b_row_count) {
       return std::unique_ptr<RowMatrix<T>>(nullptr);
     }
-    auto result = std::make_unique<RowMatrix<T>>(a_row_count, a_col_count);
+    auto result = std::make_unique<RowMatrix<T>>(a_row_count, b_col_count);
     for (int row = 0; row < a_row_count; ++row) {
-      for (int col = 0; col < a_col_count; ++col) {
-        result->SetElement(row, col, matrixA->GetElement(row, col) * matrixB->GetElement(row, col));
+      for (int col = 0; col < b_col_count; ++col) {
+        int tmp = 0;
+        for (int i = 0; i < a_col_count; ++i) {
+          tmp += (matrixA->GetElement(row, i) * matrixB->GetElement(i, col));
+        }
+        result->SetElement(row, col, tmp);
       }
     }
     return result;
@@ -251,23 +258,11 @@ class RowMatrixOperations {
    */
   static std::unique_ptr<RowMatrix<T>> GEMM(const RowMatrix<T> *matrixA, const RowMatrix<T> *matrixB,
                                             const RowMatrix<T> *matrixC) {
-    auto a_row_count = matrixA->GetRowCount();
-    auto b_row_count = matrixB->GetRowCount();
-    auto c_row_count = matrixC->GetRowCount();
-    auto a_col_count = matrixA->GetColumnCount();
-    auto b_col_count = matrixB->GetColumnCount();
-    auto c_col_count = matrixC->GetColumnCount();
-    if (a_row_count != b_row_count || a_col_count != b_col_count || a_row_count != c_row_count ||
-        a_col_count != c_col_count) {
-      return std::unique_ptr<RowMatrix<T>>(nullptr);
+    auto a_mult_b = Multiply(matrixA, matrixB);
+    if (a_mult_b == nullptr) {
+      return nullptr;
     }
-    auto result = std::make_unique<RowMatrix<T>>(a_row_count, a_col_count);
-    for (int row = 0; row < a_row_count; ++row) {
-      for (int col = 0; col < a_col_count; ++col) {
-        result->SetElement(
-            row, col, matrixA->GetElement(row, col) * matrixB->GetElement(row, col) + matrixC->GetElement(row, col));
-      }
-    }
+    auto result = Add(a_mult_b.get(), matrixC);
     return result;
   }
 };
