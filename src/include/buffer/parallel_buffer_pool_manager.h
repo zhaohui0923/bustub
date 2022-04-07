@@ -91,8 +91,8 @@ class ParallelBufferPoolManager : public BufferPoolManager {
   void FlushAllPgsImp() override;
 
  private:
-  std::vector<std::unique_ptr<BufferPoolManagerInstance>> m_instances;
-  std::mutex m_latch;
-  size_t m_start_index = 0;
+  std::vector<std::unique_ptr<BufferPoolManagerInstance>> instances_;
+  std::mutex latch_;
+  size_t start_index_ = 0;
 };
 }  // namespace bustub

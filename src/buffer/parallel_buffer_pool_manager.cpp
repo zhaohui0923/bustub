@@ -18,7 +18,7 @@ ParallelBufferPoolManager::ParallelBufferPoolManager(size_t num_instances, size_
                                                      LogManager *log_manager) {
   // Allocate and create individual BufferPoolManagerInstances
   for (size_t i = 0; i < num_instances; ++i) {
-    m_instances.push_back(
+    instances_.push_back(
         std::make_unique<BufferPoolManagerInstance>(pool_size, num_instances, i, disk_manager, log_manager));
   }
 }
@@ -28,13 +28,13 @@ ParallelBufferPoolManager::~ParallelBufferPoolManager() = default;
 
 size_t ParallelBufferPoolManager::GetPoolSize() {
   // Get size of all BufferPoolManagerInstances
-  return m_instances.size() * m_instances[0]->GetPoolSize();
+  return instances_.size() * instances_[0]->GetPoolSize();
 }
 
 BufferPoolManager *ParallelBufferPoolManager::GetBufferPoolManager(page_id_t page_id) {
   // Get BufferPoolManager responsible for handling given page id. You can use this method in your other methods.
-  auto index = page_id % m_instances.size();
-  return m_instances[index].get();
+  auto index = page_id % instances_.size();
+  return instances_[index].get();
 }
 
 Page *ParallelBufferPoolManager::FetchPgImp(page_id_t page_id) {
@@ -62,16 +62,16 @@ Page *ParallelBufferPoolManager::NewPgImp(page_id_t *page_id) {
   // starting index and return nullptr
   // 2.   Bump the starting index (mod number of instances) to start search at a different BPMI each time this function
   // is called
-  std::lock_guard<std::mutex> lg{m_latch};
-  for (size_t index = m_start_index; index < m_start_index + m_instances.size(); ++index) {
-    size_t mod_index = index % m_instances.size();
-    auto *page = m_instances[mod_index]->NewPage(page_id);
+  std::lock_guard<std::mutex> lg{latch_};
+  for (size_t index = start_index_; index < start_index_ + instances_.size(); ++index) {
+    size_t mod_index = index % instances_.size();
+    auto *page = instances_[mod_index]->NewPage(page_id);
     if (page != nullptr) {
-      m_start_index = (m_start_index + 1) % m_instances.size();
+      start_index_ = (start_index_ + 1) % instances_.size();
       return page;
     }
   }
-  m_start_index = (m_start_index + 1) % m_instances.size();
+  start_index_ = (start_index_ + 1) % instances_.size();
   return nullptr;
 }
 
@@ -82,7 +82,7 @@ bool ParallelBufferPoolManager::DeletePgImp(page_id_t page_id) {
 
 void ParallelBufferPoolManager::FlushAllPgsImp() {
   // flush all pages from all BufferPoolManagerInstances
-  for (auto &ins : m_instances) {
+  for (auto &ins : instances_) {
     ins->FlushAllPages();
   }
 }

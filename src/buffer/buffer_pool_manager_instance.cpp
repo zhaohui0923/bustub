@@ -208,7 +208,10 @@ bool BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) {
     return false;
   }
 
-  page->is_dirty_ = is_dirty;
+  // 使用判断而非直接赋值是为了避免覆盖以前的状态
+  if (is_dirty) {
+    page->is_dirty_ = is_dirty;
+  }
   page->pin_count_--;
 
   if (page->pin_count_ <= 0) {

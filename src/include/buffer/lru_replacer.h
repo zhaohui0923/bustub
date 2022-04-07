@@ -47,9 +47,9 @@ class LRUReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
-  size_t m_capacity;
-  std::list<frame_id_t> m_frame_ids;
-  std::mutex m_mutex;
+  size_t capacity_;
+  std::list<frame_id_t> frame_ids_;
+  std::mutex latch_;
 };
 
 }  // namespace bustub
