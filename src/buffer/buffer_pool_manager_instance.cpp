@@ -49,25 +49,44 @@ BufferPoolManagerInstance::~BufferPoolManagerInstance() {
 
 bool BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) {
   // Make sure you call DiskManager::WritePage!
+  // 加锁用以保证线程安全
   std::lock_guard<std::mutex> lg{latch_};
+
+  // 如果是INVALID_PAGE_ID的情况
+  // 那么后面应该通过哈希表无法找到
+  // 故无需特殊处理
+#if 0
   if (page_id == INVALID_PAGE_ID) {
     return false;
   }
+#endif
+
+  // 在本buffer pool中查找指定page_id的frame
   auto it = page_table_.find(page_id);
+  // 如果没有找到直接返回即可
   if (it == page_table_.end()) {
     return false;
   }
+  // 如果找到,记录frame_id
   auto frame_id = it->second;
+  // 并通过frame_id定位到page
   auto *page = &(pages_[frame_id]);
+  // 将该page写入到磁盘
   disk_manager_->WritePage(page_id, page->data_);
+  // 重置dirty的标志位
   page->is_dirty_ = false;
   return true;
 }
 
 void BufferPoolManagerInstance::FlushAllPgsImp() {
   // You can do it!
+  // 加锁用以实现线程安全
   std::lock_guard<std::mutex> lg{latch_};
+  // 遍历page_table中的每一项
   for (auto pt : page_table_) {
+    // 此处不调用FlushPgImp
+    // 因此此处遍历到的项都必然在page_table中
+    // 若使用FlushPgImpl会有不必要的重复判断，降低效率
     auto page_id = pt.first;
     auto frame_id = pt.second;
     auto *page = &(pages_[frame_id]);
@@ -82,6 +101,7 @@ Page *BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) {
   // 2.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
   // 3.   Update P's metadata, zero out memory and add P to the page table.
   // 4.   Set the page ID output parameter. Return a pointer to P.
+  // 加锁用以实现线程安全
   std::lock_guard<std::mutex> lg{latch_};
   auto frame_id = frame_id_t{0};
   Page *page = nullptr;
@@ -99,15 +119,19 @@ Page *BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) {
     return nullptr;
   }
 
-  page_id_t new_page_id = AllocatePage();
-  page->page_id_ = new_page_id;
+  page->page_id_ = AllocatePage();
   page->is_dirty_ = false;
   page->pin_count_ = 1;
   page->ResetMemory();
 
   page_table_[page->GetPageId()] = frame_id;
   *page_id = page->GetPageId();
-  replacer_->Pin(frame_id);
+  // 此时无需调用replacer的Pin方法
+  // replacer的Pin方法语义为将frame移出
+  // 而此frame的来源
+  // 1. free_list，必然不在replacer中
+  // 2. replacer置换出，必然不在replacer中
+  // replacer_->Pin(frame_id);
 
   return page;
 }
@@ -121,7 +145,7 @@ Page *BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) {
   // 3.     Delete R from the page table and insert P.
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
   std::lock_guard<std::mutex> lock_guard(latch_);
-  frame_id_t frame_id;
+  frame_id_t frame_id{0};
   Page *page = nullptr;
 
   auto item = page_table_.find(page_id);
