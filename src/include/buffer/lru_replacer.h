@@ -46,9 +46,17 @@ class LRUReplacer : public Replacer {
   size_t Size() override;
 
  private:
-  // TODO(student): implement me!
-  size_t capacity_;
+  // 判断指定的frame_id是否存在于replacer中
+  // remark: 存在于replacer中的frame_id对应的frame都是可以被用于置换的
+  bool IsInReplacer(frame_id_t frame_id);
+  // 存在于replacer中的可用于被置换的frame的frame_id
+  // 按照旧的在前，新的在后的顺序排列
   std::list<frame_id_t> frame_ids_;
+  // 用于通过frame_id快速定位到链表迭代器位置的哈希表
+  // 下标: 哈希表的key (frame_id)
+  // 值: 对应链表迭代器位置，当指定的key (frame_id)不存在于replacer中时，为std::list<frame_id_t>::iterator{}哨兵值
+  std::vector<std::list<frame_id_t>::iterator> frame_id_to_iter_;
+  // 用于实现线程安全的锁
   std::mutex latch_;
 };
 
